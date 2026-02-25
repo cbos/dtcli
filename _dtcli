@@ -1,0 +1,49 @@
+#compdef dtcli
+# Zsh completion for dtcli
+
+_dtcli() {
+    local line state
+
+    _arguments -C \
+        "1: :->command" \
+        "*::arg:->args"
+
+    case "$state" in
+        command)
+            _values 'dtcli command' \
+                'upload[Upload SBOM to Dependency Track]' \
+                'has-update[Check for dependency updates]' \
+                'has-policy-violations[Check for policy violations]' \
+                'help[Show help message]'
+            ;;
+        args)
+            case $line[1] in
+                upload)
+                    _arguments \
+                        '--project[Project name]:project:_dtcli_projects' \
+                        '--version[Project version]:version:' \
+                        '--parent-project[Parent project name]:parent:_dtcli_projects' \
+                        '--latest[Mark as latest version]' \
+                        '*:SBOM file:_files'
+                    ;;
+                has-update|has-policy-violations)
+                    _arguments \
+                        '(--project -project)'{--project,-project}'[Project name]:project:_dtcli_projects' \
+                        '--parent-project[Parent project name]:parent:_dtcli_projects'
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_dtcli_projects() {
+    local projects
+    if [[ -n "$DTCLI_API_KEY" && -n "$DTCLI_URL" ]]; then
+        projects=(${(f)"$(curl -s -H "X-Api-Key: $DTCLI_API_KEY" \
+            "${DTCLI_URL:-http://localhost:8080}/api/v1/project" 2>/dev/null | \
+            jq -r '.[].name' 2>/dev/null)"})
+        _describe 'projects' projects
+    fi
+}
+
+_dtcli "$@"
