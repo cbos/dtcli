@@ -29,13 +29,11 @@ _dtcli() {
                 has-update)
                     _arguments \
                         '(--project -project)'{--project,-project}'[Project name]:project:_dtcli_projects' \
-                        '--parent-project[Parent project name]:parent:_dtcli_projects' \
                         '--direct-only[Check only direct dependencies]'
                     ;;
                 has-policy-violations)
                     _arguments \
-                        '(--project -project)'{--project,-project}'[Project name]:project:_dtcli_projects' \
-                        '--parent-project[Parent project name]:parent:_dtcli_projects'
+                        '(--project -project)'{--project,-project}'[Project name]:project:_dtcli_projects'
                     ;;
             esac
             ;;

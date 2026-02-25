@@ -126,7 +126,7 @@ cmd_upload() {
     # Check if project exists, create if not
     echo "Looking up project: $project_name (version: $version)"
     local project_uuid
-    project_uuid=$(get_project_uuid "$project_name" "$parent_project") || true
+    project_uuid=$(get_project_uuid "$project_name") || true
 
     if [[ -z "$project_uuid" ]]; then
         echo "Project not found, creating new project..."
@@ -174,17 +174,12 @@ cmd_upload() {
 
 cmd_has_update() {
     local project_name=""
-    local parent_project=""
     local direct_only=false
 
     while [[ $# -gt 0 ]]; do
         case $1 in
             --project|-project)
                 project_name="$2"
-                shift 2
-                ;;
-            --parent-project)
-                parent_project="$2"
                 shift 2
                 ;;
             --direct-only)
@@ -202,7 +197,7 @@ cmd_has_update() {
 
     echo "Looking up project: $project_name"
     local project_uuid
-    project_uuid=$(get_project_uuid "$project_name" "$parent_project") || error "Project not found: $project_name"
+    project_uuid=$(get_project_uuid "$project_name") || error "Project not found: $project_name"
 
     echo "Checking for outdated dependencies..."
     local has_updates=false
@@ -264,16 +259,11 @@ cmd_has_update() {
 
 cmd_has_policy_violations() {
     local project_name=""
-    local parent_project=""
 
     while [[ $# -gt 0 ]]; do
         case $1 in
             --project|-project)
                 project_name="$2"
-                shift 2
-                ;;
-            --parent-project)
-                parent_project="$2"
                 shift 2
                 ;;
             *)
@@ -287,7 +277,7 @@ cmd_has_policy_violations() {
 
     echo "Looking up project: $project_name"
     local project_uuid
-    project_uuid=$(get_project_uuid "$project_name" "$parent_project") || error "Project not found: $project_name"
+    project_uuid=$(get_project_uuid "$project_name") || error "Project not found: $project_name"
 
     echo "Checking for policy violations..."
     local violations
@@ -331,7 +321,6 @@ Upload Options:
 
 Check Options:
     --project <name>           Project name (required)
-    --parent-project <name>    Parent project name (optional)
     --direct-only              Check only direct dependencies (has-update only)
 
 Environment Variables:
