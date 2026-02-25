@@ -175,6 +175,7 @@ cmd_upload() {
 cmd_has_update() {
     local project_name=""
     local parent_project=""
+    local direct_only=false
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -185,6 +186,10 @@ cmd_has_update() {
             --parent-project)
                 parent_project="$2"
                 shift 2
+                ;;
+            --direct-only)
+                direct_only=true
+                shift
                 ;;
             *)
                 shift
@@ -199,15 +204,46 @@ cmd_has_update() {
     local project_uuid
     project_uuid=$(get_project_uuid "$project_name" "$parent_project") || error "Project not found: $project_name"
 
-    # Get detailed component information
-    local components
-    components=$(api_call GET "/component/project/$project_uuid")
-
+    echo "Checking for outdated dependencies..."
     local has_updates=false
     echo ""
-    echo "=== Dependency Update Status ==="
 
-    if command -v jq &> /dev/null; then
+    if [[ "$direct_only" == true ]]; then
+
+        # Get dependency graph to identify direct dependencies
+        local dependency_graph=""
+        echo "Fetching dependency graph..."
+        dependency_graph=$(api_call GET "/dependencyGraph/project/$project_uuid/directDependencies")
+        echo "=== Direct Dependency Update Status ==="
+
+    echo "$dependency_graph" > dependencies.json
+
+        # Extract direct component UUIDs
+        local direct_uuids
+        direct_uuids=$(echo "$dependency_graph" | jq -r '.[].uuid')
+
+        if [[ -z "$direct_uuids" ]]; then
+            warning "No direct dependencies found or dependency graph not available"
+            return
+        fi
+
+        # Filter components to only direct dependencies
+        local outdated_components=""
+        outdated_components=$(echo "$dependency_graph" | jq -r '.[] | select(.latestVersion != null and .latestVersion != .version) | "\(.name): \(.version) → \(.latestVersion)"')
+
+        if [[ -n "$outdated_components" ]]; then
+            has_updates=true
+            warning "Outdated dependencies found:"
+            echo "$outdated_components"
+        else
+            success "All dependencies are up to date!"
+        fi
+    else
+        # Get all components
+        local components
+        components=$(api_call GET "/component/project/$project_uuid")
+        echo "=== Dependency Update Status ==="
+
         local outdated_components
         outdated_components=$(echo "$components" | jq -r '.[] | select(.repositoryMeta.latestVersion != null and .repositoryMeta.latestVersion != .version) | "\(.name): \(.version) → \(.repositoryMeta.latestVersion)"')
 
@@ -296,6 +332,7 @@ Upload Options:
 Check Options:
     --project <name>           Project name (required)
     --parent-project <name>    Parent project name (optional)
+    --direct-only              Check only direct dependencies (has-update only)
 
 Environment Variables:
     DTCLI_URL                  Dependency Track URL (default: http://localhost:8080)
@@ -304,6 +341,7 @@ Environment Variables:
 Examples:
     dtcli upload --project grafana --version 12.1.1 --parent-project home-lab --latest sbom.json
     dtcli has-update --project grafana
+    dtcli has-update --project grafana --direct-only
     dtcli has-policy-violations --project grafana
 
 EOF
