@@ -4,8 +4,8 @@ _dtcli_completion() {
 
     local commands="upload has-update has-policy-violations help"
     local upload_opts="--project --version --parent-project --latest"
-    local check_opts="--project --parent-project"
-    local update_opts="--project --parent-project --direct-only"
+    local check_opts="--project"
+    local update_opts="--project --direct-only"
 
     # Complete commands
     if [[ $cword -eq 1 ]]; then
@@ -46,7 +46,7 @@ _dtcli_completion() {
             ;;
         has-update)
             case "$prev" in
-                --project|--parent-project|-project)
+                --project|-project)
                     # Fetch project names from Dependency Track
                     if [[ -n "$DTCLI_API_KEY" && -n "$DTCLI_URL" ]]; then
                         local projects
@@ -65,7 +65,7 @@ _dtcli_completion() {
             ;;
         has-policy-violations)
             case "$prev" in
-                --project|--parent-project|-project)
+                --project|-project)
                     # Fetch project names from Dependency Track
                     if [[ -n "$DTCLI_API_KEY" && -n "$DTCLI_URL" ]]; then
                         local projects
