@@ -38,15 +38,16 @@ check_config() {
 api_call() {
     local method="$1"
     local endpoint="$2"
-    local data="${3:-}"
-
-    local curl_opts=(-s -X "$method" -H "X-Api-Key: $DTCLI_API_KEY" -H "Content-Type: application/json")
-
-    if [[ -n "$data" ]]; then
-        curl_opts+=(-d "$data")
+    local extra_curl_opts=()
+    if [[ $# -ge 3 ]]; then
+        extra_curl_opts=("${@:3}")
+    else
+        extra_curl_opts=(-H "Content-Type: application/json")
     fi
 
-    curl "${curl_opts[@]}" "${DTCLI_URL}/api/v1${endpoint}"
+    local curl_opts=(-s -X "$method" -H "X-Api-Key: $DTCLI_API_KEY")
+
+    curl "${curl_opts[@]}" "${extra_curl_opts[@]}" "${DTCLI_URL}/api/v1${endpoint}"
 }
 
 get_project_uuid() {
@@ -74,10 +75,12 @@ get_project_uuid() {
     echo "$uuid"
 }
 
+
 cmd_upload() {
     local project_name=""
     local version=""
     local parent_project=""
+    local parent_version=""
     local sbom_file=""
     local mark_latest=false
 
@@ -94,6 +97,10 @@ cmd_upload() {
                 ;;
             --parent-project)
                 parent_project="$2"
+                shift 2
+                ;;
+            --parent-version)
+                parent_version="$2"
                 shift 2
                 ;;
             --latest)
@@ -115,61 +122,36 @@ cmd_upload() {
 
     check_config
 
-    # Get parent UUID if specified
-    local parent_uuid=""
-    if [[ -n "$parent_project" ]]; then
-        echo "Looking up parent project: $parent_project"
-        parent_uuid=$(get_project_uuid "$parent_project") || error "Parent project not found: $parent_project"
-        echo "Found parent UUID: $parent_uuid"
-    fi
-
-    # Check if project exists, create if not
-    echo "Looking up project: $project_name (version: $version)"
-    local project_uuid
-    project_uuid=$(get_project_uuid "$project_name") || true
-
-    if [[ -z "$project_uuid" ]]; then
-        echo "Project not found, creating new project..."
-        local create_data="{\"name\": \"$project_name\", \"version\": \"$version\""
-
-        if [[ -n "$parent_uuid" ]]; then
-            create_data="${create_data}, \"parent\": {\"uuid\": \"$parent_uuid\"}"
-        fi
-
-        create_data="${create_data}}"
-
-        local created_project
-        created_project=$(api_call POST "/project" "$create_data")
-        project_uuid=$(echo "$created_project" | jq -r '.uuid')
-        success "Created project with UUID: $project_uuid"
-    else
-        echo "Found existing project UUID: $project_uuid"
-    fi
-
-    # Upload SBOM
+    # Upload SBOM using multipart/form-data
     echo "Uploading SBOM from $sbom_file..."
-    local sbom_content
-    sbom_content=$(base64 -w 0 "$sbom_file")
 
-    local upload_data="{\"project\": \"$project_uuid\", \"bom\": \"$sbom_content\"}"
+    local curl_opts=(-F "autoCreate=true")
+    curl_opts+=(-F "projectName=$project_name")
+    curl_opts+=(-F "projectVersion=$version")
+
+    if [[ -n "$parent_project" ]]; then
+        curl_opts+=(-F "parentName=$parent_project")
+        [[ -z "$parent_version" ]] && error "Parent version is required when parent project is specified"
+        curl_opts+=(-F "parentVersion=$parent_version")
+    fi
+
+    if [[ "$mark_latest" == true ]]; then
+        curl_opts+=(-F "isLatest=true")
+    fi
+
+    curl_opts+=(-F "bom=@$sbom_file")
 
     local upload_response
-    upload_response=$(api_call PUT "/bom" "$upload_data")
+    upload_response=$(api_call POST "/bom" "${curl_opts[@]}")
+
     local token
     token=$(echo "$upload_response" | jq -r '.token')
 
     if [[ -z "$token" || "$token" == "null" ]]; then
-        error "Failed to upload SBOM"
+        error "Failed to upload SBOM: $upload_response"
     fi
 
     success "SBOM uploaded successfully! Token: $token"
-
-    # Mark as latest if requested
-    if [[ "$mark_latest" == true ]]; then
-        echo "Marking version as latest..."
-        api_call PATCH "/project/$project_uuid" "{\"version\": \"$version\", \"tags\": [{\"name\": \"latest\"}]}" > /dev/null
-        success "Marked as latest version"
-    fi
 }
 
 cmd_has_update() {
@@ -210,8 +192,6 @@ cmd_has_update() {
         echo "Fetching dependency graph..."
         dependency_graph=$(api_call GET "/dependencyGraph/project/$project_uuid/directDependencies")
         echo "=== Direct Dependency Update Status ==="
-
-    echo "$dependency_graph" > dependencies.json
 
         # Extract direct component UUIDs
         local direct_uuids
